@@ -42,6 +42,8 @@ Write the complete English article here.
 
 `slug` 是不随语言变化的文章地址标识。发布后不要随意修改，否则旧的 `#article/slug` 链接会失效。文章按 `date` 从新到旧排列；正文支持标题、列表、引用、代码块、表格、GitHub Flavored Markdown 和 LaTeX 数学公式。
 
+文章在站内被主动打开时，会使用 `slug` 在 Supabase 中原子累加点击数。因此每篇文章必须使用唯一、稳定的小写英文 `slug`，词与词之间使用连字符。
+
 ## 发布
 
 在项目目录执行：

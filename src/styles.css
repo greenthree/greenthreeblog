@@ -57,6 +57,16 @@ body { font-family:'Inter','Noto Sans SC','Source Han Sans SC','Microsoft YaHei'
 .locale-zh .article-kicker,.locale-zh .article-reader-head .article-kicker { font-family:'Noto Sans SC','DM Mono',monospace; letter-spacing:.025em; }
 .topic-modal-inner h2 { overflow-wrap:anywhere; }
 .article-content img { display:block; height:auto; margin:22px 0; max-width:100%; }
+.article-view-count { align-items:center; border-left:1px solid rgba(0,240,255,.28); color:var(--titanium); display:inline-flex; flex:0 0 auto; font-family:'DM Mono',monospace; font-size:8px; font-variant-numeric:tabular-nums; gap:5px; letter-spacing:.05em; line-height:1; min-height:14px; padding-left:7px; white-space:nowrap; }
+.article-view-count svg { color:rgba(0,240,255,.76); flex:0 0 auto; stroke-width:1.5; }
+.article-view-value { color:#dfe8f2; display:inline-block; min-width:3ch; text-align:right; }
+.article-view-label { color:rgba(138,143,158,.72); font-size:7px; }
+.article-view-count[data-state='loading'] { opacity:.62; }
+.article-view-count[data-state='loading'] svg { animation:view-scan 1.35s ease-in-out infinite; }
+.article-view-count[data-state='unavailable'] { border-left-color:var(--hairline); color:rgba(138,143,158,.48); }
+.article-view-count[data-state='unavailable'] svg { color:rgba(138,143,158,.42); }
+.article-side>svg { color:var(--cyan); }
+.atlas-read .article-view-count { align-self:flex-end; }
 .article-reader-actions { align-items:center; display:flex; flex:0 0 auto; gap:8px; }
 .article-content p,.article-content li,.article-content a { overflow-wrap:anywhere; }
 .article-content code { overflow-wrap:anywhere; word-break:break-word; }
@@ -75,10 +85,19 @@ body { font-family:'Inter','Noto Sans SC','Source Han Sans SC','Microsoft YaHei'
   .article-reader-head { gap:10px; }
   .article-reader-head .article-kicker { min-width:0; }
   .article-reader-actions { gap:5px; }
+  .article-view-count { font-size:7px; gap:3px; padding-left:5px; }
+  .article-view-label { display:none; }
+  .article-view-value { min-width:2.5ch; }
+  .article-side { gap:6px; min-width:42px; }
+  .atlas-read .article-view-count { border-left:0; padding-left:0; }
+  .article-reader-head .article-kicker { row-gap:6px; }
   .article-reader-actions .language-switch { padding:0 5px; }
   .hud-pill { bottom:10px; right:10px; }
   .bottom-line { padding:12px 0 70px; }
 }
+
+@keyframes view-scan { 0%,100% { opacity:.28; } 50% { filter:drop-shadow(0 0 4px rgba(0,240,255,.45)); opacity:1; } }
+@media (prefers-reduced-motion:reduce) { .article-view-count[data-state='loading'] svg { animation:none; opacity:.55; } }
 
 /* Atlas pages: the notebook's index layer, derived from the same content graph. */
 .atlas-shell { min-height:100vh; padding-bottom:22px; }

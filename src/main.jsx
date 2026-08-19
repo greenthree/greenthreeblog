@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Compass,
   ExternalLink,
+  Eye,
   FileText,
   Hand,
   Languages,
@@ -37,6 +38,7 @@ const UI_COPY = {
     footer: '页脚', social: '社交', about: 'greenthree 的网站与实验笔记，从第一性原理开始构建。', contact: '联系',
     renderCore: '性能监控', representation: '表象', renderTelemetry: '渲染遥测', openTelemetry: '展开性能监控', closeTelemetry: '收起性能监控',
     state: '态', closeArticle: '关闭文章', closeTopic: '关闭主题', endNote: '文章结束', returnArchive: '返回归档',
+    views: '次点击', viewsLoading: '正在读取点击数', viewsUnavailable: '点击数暂时不可用',
     openMenu: '打开导航', closeMenu: '关闭导航', languageControl: '切换网站语言',
     query: '检索', topicQueued: '该主题来自当前文章索引。打开对应场记，可继续查看相关实验、代码与推导。',
     topicStatus: '已索引 / 当前文章', nominal: '所有系统正常 / 2024—∞', stateOnline: '态矢量在线'
@@ -56,6 +58,7 @@ const UI_COPY = {
     footer: 'FOOTER', social: 'SOCIAL', about: 'Site and lab journal by greenthree. Built from first principles.', contact: 'Contact',
     renderCore: 'RENDER CORE', representation: 'REPRESENTATION', renderTelemetry: 'Render telemetry', openTelemetry: 'Expand performance telemetry', closeTelemetry: 'Collapse performance telemetry',
     state: 'STATE', closeArticle: 'Close article', closeTopic: 'Close topic', endNote: 'END OF NOTE', returnArchive: 'RETURN TO ARCHIVE',
+    views: 'CLICKS', viewsLoading: 'Loading article clicks', viewsUnavailable: 'Article clicks unavailable',
     openMenu: 'Open navigation', closeMenu: 'Close navigation', languageControl: 'Switch site language',
     query: 'QUERY', topicQueued: 'This topic comes from the live article index. Open a field note to inspect the related experiments, code, and derivations.',
     topicStatus: 'INDEXED / LIVE ARTICLES', nominal: 'ALL SYSTEMS NOMINAL / 2024—∞', stateOnline: 'STATE VECTOR ONLINE'
@@ -87,6 +90,48 @@ const RESOURCE_CATALOG = [
 ]
 
 const articleModules = import.meta.glob('./content/*.md', { query: '?raw', import: 'default', eager: true })
+
+const SUPABASE_URL = String(import.meta.env.VITE_SUPABASE_URL || '').replace(/\/+$/, '')
+const SUPABASE_ANON_KEY = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '')
+const ARTICLE_VIEWS_ENABLED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
+
+function supabaseHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    ...extra
+  }
+}
+
+async function fetchArticleViewCounts(articleIds, signal) {
+  if (!ARTICLE_VIEWS_ENABLED || articleIds.length === 0) return {}
+  const params = new URLSearchParams({
+    select: 'article_slug,view_count',
+    article_slug: `in.(${articleIds.join(',')})`
+  })
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/article_views?${params}`, {
+    headers: supabaseHeaders(),
+    signal
+  })
+  if (!response.ok) throw new Error(`Article view request failed (${response.status})`)
+  const rows = await response.json()
+  const counts = Object.fromEntries(articleIds.map(id => [id, 0]))
+  rows.forEach(row => { counts[row.article_slug] = Number(row.view_count) || 0 })
+  return counts
+}
+
+async function incrementArticleViewCount(articleId) {
+  if (!ARTICLE_VIEWS_ENABLED) throw new Error('Article views are not configured')
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/increment_article_view`, {
+    method: 'POST',
+    headers: supabaseHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ target_slug: articleId })
+  })
+  if (!response.ok) throw new Error(`Article view increment failed (${response.status})`)
+  const count = Number(await response.json())
+  if (!Number.isFinite(count)) throw new Error('Article view increment returned an invalid count')
+  return count
+}
 
 function slugify(value) {
   return String(value)
@@ -236,6 +281,44 @@ function createTopicCatalog(items) {
 }
 
 const topicCatalog = createTopicCatalog(articles)
+
+function useArticleViews(articleIds) {
+  const initialStatus = ARTICLE_VIEWS_ENABLED ? 'loading' : 'unavailable'
+  const [views, setViews] = useState(() => Object.fromEntries(articleIds.map(id => [id, { count: null, status: initialStatus }])))
+  const pendingClickIds = useRef(new Set())
+
+  useEffect(() => {
+    if (!ARTICLE_VIEWS_ENABLED || articleIds.length === 0) return undefined
+    const controller = new AbortController()
+    fetchArticleViewCounts(articleIds, controller.signal)
+      .then(counts => setViews(current => Object.fromEntries(articleIds.map(id => {
+        const currentCount = current[id]?.count
+        const fetchedCount = counts[id] ?? 0
+        return [id, { count: currentCount == null ? fetchedCount : Math.max(currentCount, fetchedCount), status: 'ready' }]
+      }))))
+      .catch(error => {
+        if (error.name !== 'AbortError') setViews(current => Object.fromEntries(articleIds.map(id => [id, { count: current[id]?.count ?? null, status: 'unavailable' }])))
+      })
+    return () => controller.abort()
+  }, [articleIds])
+
+  const increment = articleId => {
+    if (pendingClickIds.current.has(articleId)) return
+    pendingClickIds.current.add(articleId)
+    incrementArticleViewCount(articleId)
+      .then(count => setViews(current => ({
+        ...current,
+        [articleId]: { count: Math.max(current[articleId]?.count ?? 0, count), status: 'ready' }
+      })))
+      .catch(() => setViews(current => ({
+        ...current,
+        [articleId]: { count: current[articleId]?.count ?? null, status: 'unavailable' }
+      })))
+      .finally(() => pendingClickIds.current.delete(articleId))
+  }
+
+  return [views, increment]
+}
 
 function initialLocale() {
   try {
@@ -430,6 +513,18 @@ function HudDock({ representation, setRepresentation, copy }) {
   return <aside className="hud-dock" aria-label={copy.renderTelemetry}><div className="hud-head"><span className="hud-dot" /> {copy.renderCore} <button type="button" className="hud-close" onClick={() => setExpanded(false)} aria-label={copy.closeTelemetry}><X size={10} aria-hidden="true" /></button></div><div className="hud-stats"><div><span className="mono">FPS</span><strong>60</strong></div><div><span className="mono">GPU</span><strong>42%</strong></div><div><span className="mono">DT</span><strong>0.016</strong></div></div><div className="hud-toggle"><span className="mono">{copy.representation}</span><button onClick={() => setRepresentation(representation === 'SCHR' ? 'HEIS' : 'SCHR')} aria-label={copy.representation}><span className={representation === 'SCHR' ? 'active' : ''}>SCHR</span><span className={representation === 'HEIS' ? 'active' : ''}>HEIS</span></button></div></aside>
 }
 
+function ArticleViewCount({ view, copy }) {
+  const status = view?.status || 'unavailable'
+  const available = status === 'ready' && Number.isFinite(view?.count)
+  const value = available ? view.count.toLocaleString('en-US') : status === 'loading' ? '---' : 'N/A'
+  const label = available ? `${value} ${copy.views}` : status === 'loading' ? copy.viewsLoading : copy.viewsUnavailable
+  return <span className="article-view-count" data-state={status} aria-label={label} aria-busy={status === 'loading'}>
+    <Eye size={12} aria-hidden="true" />
+    <span className="article-view-value">{value}</span>
+    <span className="article-view-label">{copy.views}</span>
+  </span>
+}
+
 function ArticleArchive({ items, onOpen, copy }) {
   return <section id="articles" className="panel article-archive">
     <PanelTitle icon={<BookOpen size={14} />} title={copy.archive} meta={`${String(items.length).padStart(2, '0')} ${copy.articleUnit}`} tone="violet" />
@@ -438,7 +533,7 @@ function ArticleArchive({ items, onOpen, copy }) {
       {items.map((article, index) => <button className="article-row" key={article.id} onClick={() => onOpen(article)}>
         <span className="article-index mono">{String(index + 1).padStart(2, '0')}</span>
         <span className="article-main" lang={article.language}><span className="article-kicker mono"><span>{article.category}</span><span>{article.displayDate}</span></span><strong>{article.title}</strong><span className="article-excerpt">{article.excerpt}</span></span>
-        <span className="article-side"><span className="mono">{article.readTime}</span><ArrowUpRight size={15} /></span>
+        <span className="article-side"><span className="mono">{article.readTime}</span><ArticleViewCount view={article.view} copy={copy} /><ArrowUpRight size={15} /></span>
       </button>)}
     </div>
     <div className="article-archive-foot mono"><span>{copy.archiveInstruction}</span><span>{copy.hashRoutes}</span></div>
@@ -457,7 +552,7 @@ function ArticleReader({ article, onClose, copy, locale, onLocaleChange }) {
   return <div className="article-modal" role="dialog" aria-modal="true" aria-label={article.title} onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
     <div className="article-reader">
       <div className="article-reader-head">
-        <span className="article-kicker mono"><span>{article.category}</span><span>{article.displayDate}</span><span>{article.readTime}</span></span>
+        <span className="article-kicker mono"><span>{article.category}</span><span>{article.displayDate}</span><span>{article.readTime}</span><ArticleViewCount view={article.view} copy={copy} /></span>
         <div className="article-reader-actions"><LanguageSwitch locale={locale} onChange={onLocaleChange} label={copy.languageControl} /><button className="icon-button" onClick={onClose} aria-label={copy.closeArticle}><X size={17} /></button></div>
       </div>
       <article className="article-content" lang={article.language}>
@@ -517,7 +612,7 @@ function ArticleAtlas({ locale, items, onOpen, copy, onLocaleChange }) {
     <AtlasHero eyebrow={atlasCopy.eyebrow} title={atlasCopy.title} description={atlasCopy.description} stats={[{ value: items.length, label: atlasCopy.count }, { value: Object.keys(grouped).length, label: locale === 'zh' ? '个年份' : 'YEARS' }]} />
     <AtlasSearch value={query} onChange={setQuery} placeholder={atlasCopy.search} resultLabel={ATLAS_COPY[locale].result} resultCount={filtered.length} />
     <div className="chronology">
-      {Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a)).map(([year, yearArticles]) => <section className="chronology-group" key={year}><div className="chronology-year"><span>{year}</span><small className="mono">{String(yearArticles.length).padStart(2, '0')} {atlasCopy.count}</small></div><div className="atlas-article-list">{yearArticles.map(article => <button key={article.id} onClick={() => onOpen(article)}><span className="mono">{article.displayDate}</span><div lang={article.language}><small>{article.category}</small><h2>{article.title}</h2><p>{article.excerpt}</p><div className="atlas-tags">{article.tags.slice(0, 4).map(tag => <span key={tag}>{tag}</span>)}</div></div><span className="atlas-read mono">{article.readTime}<ArrowUpRight size={16} /></span></button>)}</div></section>)}
+      {Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a)).map(([year, yearArticles]) => <section className="chronology-group" key={year}><div className="chronology-year"><span>{year}</span><small className="mono">{String(yearArticles.length).padStart(2, '0')} {atlasCopy.count}</small></div><div className="atlas-article-list">{yearArticles.map(article => <button key={article.id} onClick={() => onOpen(article)}><span className="mono">{article.displayDate}</span><div lang={article.language}><small>{article.category}</small><h2>{article.title}</h2><p>{article.excerpt}</p><div className="atlas-tags">{article.tags.slice(0, 4).map(tag => <span key={tag}>{tag}</span>)}</div></div><span className="atlas-read mono"><span>{article.readTime}</span><ArticleViewCount view={article.view} copy={copy} /><ArrowUpRight size={16} /></span></button>)}</div></section>)}
       {filtered.length === 0 && <p className="atlas-empty">{atlasCopy.empty}</p>}
     </div>
   </AtlasPage>
@@ -569,10 +664,12 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedTopic, setSelectedTopic] = useState(null)
   const [selectedArticle, setSelectedArticle] = useState(() => articleFromHash())
+  const articleIds = useMemo(() => articles.map(article => article.id), [])
+  const [articleViews, incrementArticleView] = useArticleViews(articleIds)
   const articleMap = useMemo(() => new Map(articles.map(article => [article.id, article])), [])
-  const localizedArticles = useMemo(() => articles.map(article => localizeArticle(article, locale)), [locale])
+  const localizedArticles = useMemo(() => articles.map(article => ({ ...localizeArticle(article, locale), view: articleViews[article.id] })), [articleViews, locale])
   const visibleTopics = topicCatalog.filter(topic => topic.visibleIn[locale])
-  const localizedSelectedArticle = selectedArticle ? localizeArticle(selectedArticle, locale) : null
+  const localizedSelectedArticle = selectedArticle ? { ...localizeArticle(selectedArticle, locale), view: articleViews[selectedArticle.id] } : null
   const selectedTopicEntry = selectedTopic ? topicCatalog.find(topic => topic.id === selectedTopic) : null
   const copy = UI_COPY[locale]
 
@@ -597,6 +694,7 @@ function App() {
   const openArticle = article => {
     setSelectedArticle(articleMap.get(article.id) || article)
     window.location.hash = `article/${encodeURIComponent(article.id)}`
+    incrementArticleView(article.id)
   }
 
   const closeArticle = () => {

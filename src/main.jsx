@@ -112,13 +112,19 @@ const achievements = [
 
 function BlochSphere({ phase, onPhase }) {
   const canvasRef = useRef(null)
-  const pointer = useRef({ x: 0.5, y: 0.38 })
+  const pointer = useRef({ x: 0.5, y: 0.38, targetX: 0.5, targetY: 0.38 })
+  const phaseState = useRef({ current: phase, target: phase, reported: phase })
+  const onPhaseRef = useRef(onPhase)
+
+  useEffect(() => { onPhaseRef.current = onPhase }, [onPhase])
+  useEffect(() => { phaseState.current.target = phase }, [phase])
 
   useEffect(() => {
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
     let raf
     let tick = 0
+    let lastFrame = performance.now()
     const points = Array.from({ length: 120 }, (_, i) => ({
       lat: -Math.PI / 2 + (i % 12) * Math.PI / 11,
       lon: (i / 120) * Math.PI * 2,
@@ -131,13 +137,53 @@ function BlochSphere({ phase, onPhase }) {
       canvas.height = rect.height * ratio
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
     }
-    const move = (event) => {
-      const rect = canvas.getBoundingClientRect()
-      pointer.current.x = (event.clientX - rect.left) / rect.width
-      pointer.current.y = (event.clientY - rect.top) / rect.height
-      onPhase(Math.round(pointer.current.x * 360))
+    const reportPhase = value => {
+      const nextPhase = Math.round(Math.max(0, Math.min(1, value)) * 360)
+      phaseState.current.target = nextPhase
+      if (phaseState.current.reported !== nextPhase) {
+        phaseState.current.reported = nextPhase
+        onPhaseRef.current(nextPhase)
+      }
     }
-    const render = () => {
+    const updateTarget = (clientX, clientY) => {
+      const rect = canvas.getBoundingClientRect()
+      const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+      const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+      pointer.current.targetX = x
+      pointer.current.targetY = y
+      reportPhase(x)
+    }
+    const move = event => {
+      if (event.pointerType !== 'mouse' && !canvas.hasPointerCapture(event.pointerId)) return
+      updateTarget(event.clientX, event.clientY)
+    }
+    const down = event => {
+      canvas.setPointerCapture?.(event.pointerId)
+      updateTarget(event.clientX, event.clientY)
+    }
+    const keyDown = event => {
+      const phaseStep = event.shiftKey ? 18 : 6
+      const positionStep = event.shiftKey ? 0.12 : 0.04
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault()
+        const direction = event.key === 'ArrowLeft' ? -1 : 1
+        const nextPhase = Math.max(0, Math.min(360, phaseState.current.target + direction * phaseStep))
+        pointer.current.targetX = nextPhase / 360
+        reportPhase(pointer.current.targetX)
+      }
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault()
+        const direction = event.key === 'ArrowUp' ? -1 : 1
+        pointer.current.targetY = Math.max(0, Math.min(1, pointer.current.targetY + direction * positionStep))
+      }
+    }
+    const render = now => {
+      const delta = Math.min(40, Math.max(0, now - lastFrame))
+      const damping = 1 - Math.exp(-delta * 0.014)
+      lastFrame = now
+      pointer.current.x += (pointer.current.targetX - pointer.current.x) * damping
+      pointer.current.y += (pointer.current.targetY - pointer.current.y) * damping
+      phaseState.current.current += (phaseState.current.target - phaseState.current.current) * damping
       const { width, height } = canvas.getBoundingClientRect()
       const cx = width * 0.5
       const cy = height * 0.51
@@ -166,7 +212,12 @@ function BlochSphere({ phase, onPhase }) {
         ctx.arc(x, y, z3 > 0.3 ? 1.7 : 1.1, 0, Math.PI * 2)
         ctx.fill()
       }
-      const tip = { x: cx + Math.cos(rot + phase * 0.017) * radius * 0.72, y: cy - Math.sin(0.82 + pointer.current.y) * radius * 0.7 }
+      const polar = 0.22 + pointer.current.y * (Math.PI - 0.44)
+      const azimuth = rot + phaseState.current.current * Math.PI / 180
+      const tip = {
+        x: cx + Math.sin(polar) * Math.cos(azimuth) * radius * 0.76,
+        y: cy - Math.cos(polar) * radius * 0.76
+      }
       const glow = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, 40)
       glow.addColorStop(0, 'rgba(0,240,255,.75)'); glow.addColorStop(1, 'rgba(0,240,255,0)')
       ctx.fillStyle = glow; ctx.fillRect(tip.x - 40, tip.y - 40, 80, 80)
@@ -175,13 +226,23 @@ function BlochSphere({ phase, onPhase }) {
       ctx.beginPath(); ctx.strokeStyle = 'rgba(0,240,255,.6)'; ctx.lineWidth = 1; ctx.arc(tip.x, tip.y, 11 + Math.sin(tick * 0.008) * 3, 0, Math.PI * 2); ctx.stroke()
       ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = '10px JetBrains Mono, monospace'; ctx.fillText('|ψ⟩', tip.x + 12, tip.y - 10)
       ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.font = '9px JetBrains Mono, monospace'; ctx.fillText('X', cx + radius + 8, cy + 3); ctx.fillText('Z', cx - 3, cy - radius - 12); ctx.fillText('Y', cx - radius - 14, cy + 5)
-      tick += 16
+      tick += delta
       raf = requestAnimationFrame(render)
     }
-    resize(); render(); window.addEventListener('resize', resize); canvas.addEventListener('pointermove', move)
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); canvas.removeEventListener('pointermove', move) }
-  }, [phase, onPhase])
-  return <canvas ref={canvasRef} className="bloch-canvas" aria-label="Interactive Bloch sphere" />
+    resize(); raf = requestAnimationFrame(render)
+    window.addEventListener('resize', resize)
+    canvas.addEventListener('pointerdown', down)
+    canvas.addEventListener('pointermove', move)
+    canvas.addEventListener('keydown', keyDown)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', resize)
+      canvas.removeEventListener('pointerdown', down)
+      canvas.removeEventListener('pointermove', move)
+      canvas.removeEventListener('keydown', keyDown)
+    }
+  }, [])
+  return <canvas ref={canvasRef} className="bloch-canvas" aria-label="Interactive Bloch sphere. Use pointer or arrow keys to rotate the state vector." tabIndex={0} />
 }
 
 function WaveCanvas() {

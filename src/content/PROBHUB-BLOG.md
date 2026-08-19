@@ -12,7 +12,8 @@ translations:
       - ACM/ICPC
       - 算法竞赛
       - 出题工具
-      - AI Agent
+      - AI 智能体
+      - 人工智能
   en:
     language: "en"
     title: "Turning Contest Problemsetting into a Verifiable Workflow: Why I Built ProbHub"
@@ -24,6 +25,7 @@ translations:
       - Problemsetting
       - Verification
       - AI Agents
+      - ARTIFICIAL INTELLIGENCE
 ---
 
 <!-- lang:zh -->

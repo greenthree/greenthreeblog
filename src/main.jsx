@@ -668,7 +668,18 @@ function App() {
   const [articleViews, incrementArticleView] = useArticleViews(articleIds)
   const articleMap = useMemo(() => new Map(articles.map(article => [article.id, article])), [])
   const localizedArticles = useMemo(() => articles.map(article => ({ ...localizeArticle(article, locale), view: articleViews[article.id] })), [articleViews, locale])
-  const visibleTopics = topicCatalog.filter(topic => topic.visibleIn[locale])
+  const visibleTopics = useMemo(() => topicCatalog
+    .map((topic, sourceIndex) => {
+      const topicViews = topic.articleIds.map(articleId => articleViews[articleId])
+      const countsReady = topicViews.every(viewState => viewState?.status === 'ready' && Number.isFinite(viewState.count))
+      return {
+        ...topic,
+        sourceIndex,
+        totalClicks: countsReady ? topicViews.reduce((sum, viewState) => sum + viewState.count, 0) : null
+      }
+    })
+    .filter(topic => topic.visibleIn[locale])
+    .sort((a, b) => (b.totalClicks ?? -1) - (a.totalClicks ?? -1) || a.sourceIndex - b.sourceIndex), [articleViews, locale])
   const localizedSelectedArticle = selectedArticle ? { ...localizeArticle(selectedArticle, locale), view: articleViews[selectedArticle.id] } : null
   const selectedTopicEntry = selectedTopic ? topicCatalog.find(topic => topic.id === selectedTopic) : null
   const copy = UI_COPY[locale]
@@ -733,7 +744,7 @@ function App() {
       </div>
       <aside className="sidebar">
         <section className="panel wave-card"><PanelTitle icon={<Activity size={14} />} title={copy.wave} meta="ψ(x,t)" tone="cyan" /><WaveCanvas ariaLabel={copy.waveLabel} amplitudeLabel={copy.amplitudeLabel} /><div className="wave-formula mono"><MathFormula expression={String.raw`\int \lvert\psi(x, t)\rvert^2\,\mathrm{d}x = 1`} /></div><p>{copy.waveDescription}</p></section>
-        <section id="topics" className="panel topics-card"><PanelTitle icon={<Compass size={14} />} title={copy.topics} meta={`${String(visibleTopics.length).padStart(2, '0')} / LIVE`} tone="violet" /><div className="topic-list">{visibleTopics.map(topic => <button key={topic.id} onClick={() => setSelectedTopic(topic.id)}>{topic[locale]}<ChevronRight size={12} /></button>)}</div></section>
+        <section id="topics" className="panel topics-card"><PanelTitle icon={<Compass size={14} />} title={copy.topics} meta={`${String(visibleTopics.length).padStart(2, '0')} / LIVE`} tone="violet" /><div className="topic-list">{visibleTopics.map(topic => { const ready = topic.totalClicks != null; const clickValue = ready ? topic.totalClicks.toLocaleString('en-US') : '---'; return <button key={topic.id} onClick={() => setSelectedTopic(topic.id)}><span className="topic-name">{topic[locale]}</span><span className="topic-score mono" data-state={ready ? 'ready' : 'loading'} aria-label={ready ? `${clickValue} ${copy.views}` : copy.viewsLoading} aria-busy={!ready}><Eye className="topic-eye" size={11} aria-hidden="true" /><span>{clickValue}</span><ChevronRight className="topic-chevron" size={12} aria-hidden="true" /></span></button> })}</div></section>
         <section id="resources" className="sidebar-footer panel"><div><span className="mono">{copy.footer}</span><p>{copy.about}</p></div><div><span className="mono">{copy.social}</span><a href="https://github.com/greenthree" target="_blank" rel="noreferrer">GitHub <ChevronRight size={12} /></a><a href="mailto:hello@greenthree.blog">{copy.contact} <ChevronRight size={12} /></a></div><div className="footer-atom"><Atom size={34} /></div></section>
       </aside>
     </main>

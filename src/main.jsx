@@ -6,23 +6,24 @@ import {
   Atom,
   Binary,
   BookOpen,
-  CalendarDays,
   ChevronRight,
+  CircleCheck,
   CircleHelp,
+  Clock3,
   Code2,
   Compass,
   Cpu,
   FileText,
   GitBranch,
+  GripVertical,
   Hand,
   Menu,
-  Network,
   Orbit,
   Radio,
   Settings2,
   Sigma,
-  Sparkles,
   ScanLine,
+  SquareTerminal,
   Tag,
   X,
   Zap
@@ -31,7 +32,7 @@ import { parse as parseYaml } from 'yaml'
 import { MarkdownRenderer, MathFormula } from './math.jsx'
 import './styles.css'
 
-const topics = ['Qiskit', 'Quantum Supremacy', 'Vector Cherminy', 'Asymptotic', 'Graph Theory', 'NISQ', 'Samlit Heuristics', 'Codeforces']
+const topics = ['Qiskit', 'Quantum Advantage', 'Vector Calculus', 'Asymptotics', 'Graph Theory', 'NISQ', 'Simulated Annealing', 'Codeforces']
 
 const articleModules = import.meta.glob('./content/*.md', { query: '?raw', import: 'default', eager: true })
 
@@ -56,6 +57,22 @@ function formatArticleDate(value, language = 'zh-CN') {
   return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
     .format(date)
     .toUpperCase()
+}
+
+function normalizeReadTime(value) {
+  const match = String(value || '').match(/\d+/)
+  const minutes = match ? Math.min(99, Math.max(1, Number.parseInt(match[0], 10))) : 5
+  return `${String(minutes).padStart(2, '0')} MIN`
+}
+
+function formatComplex(real, imaginary) {
+  const normalize = value => Math.abs(value) < 0.005 ? 0 : value
+  const formatPart = value => Math.abs(normalize(value)).toFixed(2)
+  const realValue = normalize(real)
+  const imaginaryValue = normalize(imaginary)
+  const realPart = `${realValue < 0 ? '−' : ''}${formatPart(realValue)}`
+  const imaginarySign = imaginaryValue < 0 ? '−' : '+'
+  return `${realPart} ${imaginarySign} ${formatPart(imaginaryValue)}i`
 }
 
 function parseArticle(raw) {
@@ -90,7 +107,7 @@ const articles = Object.entries(articleModules)
       language,
       category: String(parsed.data.category || 'FIELD NOTE'),
       excerpt: String(parsed.data.excerpt || 'A new note from the quantum core.'),
-      readTime: String(parsed.data.readTime || '05 MIN'),
+      readTime: normalizeReadTime(parsed.data.readTime),
       tags,
       content: parsed.content.trim()
     }
@@ -108,6 +125,14 @@ const achievements = [
   { title: 'Paper presentation in scai lab', date: '17 MAY 2024', tone: 'violet' },
   { title: 'Codeforces round — 4 problems', date: '22 MAR 2024', tone: 'crimson' },
   { title: 'Research notebook v0.3', date: '25 FEB 2024', tone: 'amber' }
+]
+
+const liveSubmissions = [
+  { problem: 'CF 1991E / COLORING GAME', judge: 'CODEFORCES', language: 'C++20', verdict: 'ACCEPTED', runtime: '62 MS', tone: 'accepted' },
+  { problem: 'P3381 / MIN-COST MAX-FLOW', judge: 'LUOGU', language: 'C++20', verdict: 'ACCEPTED', runtime: '118 MS', tone: 'accepted' },
+  { problem: 'ABC365 F / MANHATTAN CAFE', judge: 'ATCODER', language: 'C++23', verdict: 'ACCEPTED', runtime: '94 MS', tone: 'accepted' },
+  { problem: 'VQE / GROUND STATE', judge: 'LOCAL LAB', language: 'QISKIT', verdict: 'RUNNING', runtime: 'T+04.8 S', tone: 'running' },
+  { problem: 'BLOCH CONTROL / PHASE SWEEP', judge: 'LOCAL LAB', language: 'PYTHON', verdict: 'QUEUED', runtime: 'Q/01', tone: 'running' }
 ]
 
 function BlochSphere({ phase, onPhase }) {
@@ -270,11 +295,114 @@ function WaveCanvas() {
 
 function CircuitCard() {
   const [gate, setGate] = useState('H')
-  const state = gate === 'H' ? ['0.71 + 0.00i', '0.71 + 0.00i'] : ['1.00 + 0.00i', '0.00 + 0.00i']
-  return <section className="panel circuit-card"><PanelTitle icon={<Cpu size={14} />} title="QUANTUM CIRCUIT SIMULATOR" meta="LIVE STATE" tone="cyan" /><div className="circuit-wrap"><div className="qubit-label mono">|q₀⟩</div><div className="circuit-wire"><span className="gate gate-cyan">{gate}</span><span className="gate gate-violet">•</span><span className="gate gate-crimson">Z</span><span className="gate gate-measure" aria-label="Measurement"><ScanLine size={12} /></span></div><div className="qubit-label mono">|q₁⟩</div><div className="circuit-wire"><span className="gate gate-cyan">{gate}</span><span className="gate gate-violet">⊕</span><span className="gate gate-crimson">Z</span><span className="gate gate-measure" aria-label="Measurement"><ScanLine size={12} /></span></div></div><div className="circuit-controls"><span className="mono">GATE SET</span>{['H', 'X', 'Z'].map(item => <button key={item} className={`mini-gate ${gate === item ? 'selected' : ''}`} onClick={() => setGate(item)}>{item}</button>)}<button className="circuit-settings" aria-label="Configure circuit"><Settings2 size={13} /></button><span className="state-readout mono">|ψ⟩ = [{state[0]}, {state[1]}]</span></div></section>
+  const [draggedGate, setDraggedGate] = useState(null)
+  const [dropTarget, setDropTarget] = useState(null)
+  const draggedGateRef = useRef(null)
+  const states = {
+    H: ['0.71 + 0.00i', '0.71 + 0.00i'],
+    X: ['0.00 + 0.00i', '1.00 + 0.00i'],
+    Z: ['1.00 + 0.00i', '0.00 + 0.00i']
+  }
+  const state = states[gate]
+  useEffect(() => {
+    const clearPointerDrag = () => {
+      draggedGateRef.current = null
+      setDraggedGate(null)
+      setDropTarget(null)
+    }
+    window.addEventListener('pointerup', clearPointerDrag)
+    window.addEventListener('pointercancel', clearPointerDrag)
+    return () => {
+      window.removeEventListener('pointerup', clearPointerDrag)
+      window.removeEventListener('pointercancel', clearPointerDrag)
+    }
+  }, [])
+  const setActiveDrag = nextGate => {
+    draggedGateRef.current = nextGate
+    setDraggedGate(nextGate)
+  }
+  const applyGate = nextGate => {
+    if (states[nextGate]) setGate(nextGate)
+    draggedGateRef.current = null
+    setDraggedGate(null)
+    setDropTarget(null)
+  }
+  const startDrag = (event, nextGate) => {
+    event.dataTransfer.effectAllowed = 'copy'
+    event.dataTransfer.setData('text/plain', nextGate)
+    setActiveDrag(nextGate)
+  }
+  const dropGate = event => {
+    event.preventDefault()
+    applyGate(event.dataTransfer.getData('text/plain') || draggedGate)
+  }
+  const releasePointerGate = event => {
+    const nextGate = draggedGateRef.current
+    if (!nextGate) return
+    event.preventDefault()
+    applyGate(nextGate)
+  }
+  const renderWire = (qubit, control) => <>
+    <div className="qubit-label mono">|q<sub>{qubit}</sub>⟩</div>
+    <div
+      className={`circuit-wire ${dropTarget === qubit ? 'is-dragover' : ''}`}
+      onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDropTarget(qubit) }}
+      onDrop={dropGate}
+      onPointerEnter={() => { if (draggedGateRef.current) setDropTarget(qubit) }}
+      onPointerLeave={() => { if (dropTarget === qubit) setDropTarget(null) }}
+      onPointerUp={releasePointerGate}
+    >
+      <span className="gate-slot" aria-label={`Active ${gate} gate on q${qubit}`}><span className="gate gate-cyan">{gate}</span></span>
+      <span className="gate gate-violet">{control}</span>
+      <span className="gate gate-crimson">Z</span>
+      <span className="gate gate-measure" aria-label={`Measure q${qubit}`}><ScanLine size={12} /></span>
+    </div>
+  </>
+  return <section className="panel circuit-card">
+    <PanelTitle icon={<Cpu size={14} />} title="QUANTUM CIRCUIT SIMULATOR" meta="LIVE STATE" tone="cyan" />
+    <div className="circuit-wrap">{renderWire(0, '•')}{renderWire(1, '⊕')}</div>
+    <div className="circuit-controls">
+      <span className="gate-set-label mono"><GripVertical size={12} /> GATE SET / DRAG</span>
+      {Object.keys(states).map(item => <button
+        type="button"
+        key={item}
+        className={`mini-gate ${gate === item ? 'selected' : ''}`}
+        draggable
+        aria-pressed={gate === item}
+        onClick={() => applyGate(item)}
+        onPointerDown={event => { if (event.button === 0) setActiveDrag(item) }}
+        onDragStart={event => startDrag(event, item)}
+        onDragEnd={() => { draggedGateRef.current = null; setDraggedGate(null); setDropTarget(null) }}
+      >{item}</button>)}
+      <div
+        className={`circuit-drop-slot ${draggedGate ? 'is-ready' : ''} ${dropTarget === 'tray' ? 'is-dragover' : ''}`}
+        onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDropTarget('tray') }}
+        onDrop={dropGate}
+        onPointerEnter={() => { if (draggedGateRef.current) setDropTarget('tray') }}
+        onPointerLeave={() => { if (dropTarget === 'tray') setDropTarget(null) }}
+        onPointerUp={releasePointerGate}
+      >{draggedGate ? `DROP ${draggedGate} / APPLY OPERATOR` : 'DRAG A GATE TO THE DASHED CIRCUIT SLOT'}</div>
+      <button type="button" className="circuit-settings" aria-label="Configure circuit"><Settings2 size={13} /></button>
+      <span className="state-readout mono" aria-live="polite">|ψ⟩ = [{state[0]}, {state[1]}]</span>
+    </div>
+  </section>
 }
 
 function PanelTitle({ icon, title, meta, tone = 'cyan' }) { return <div className="panel-title"><span className={`panel-icon ${tone}`}>{icon}</span><span className="panel-title-text">{title}</span><span className="panel-meta mono">{meta}</span></div> }
+
+function LiveSubmissionFeed() {
+  return <section className="panel live-submission-card">
+    <PanelTitle icon={<SquareTerminal size={14} />} title="LIVE SUBMISSION FEED" meta={<span className="live-meta"><span /> SYNCED</span>} tone="cyan" />
+    <div className="submission-list">
+      {liveSubmissions.map(item => <div className="submission-row" key={item.problem}>
+        <span className={`submission-icon ${item.tone}`}>{item.tone === 'accepted' ? <CircleCheck size={14} /> : <Clock3 size={14} />}</span>
+        <span className="submission-problem"><strong>{item.problem}</strong><span className="mono">{item.judge} / {item.language}</span></span>
+        <span className={`submission-result mono ${item.tone}`}><strong>{item.verdict}</strong><span>{item.runtime}</span></span>
+      </div>)}
+    </div>
+    <div className="submission-foot mono"><span>QUEUE 00</span><span>JUDGE LINK / 18 MS</span></div>
+  </section>
+}
 
 function HudDock({ representation, setRepresentation }) {
   return <aside className="hud-dock" aria-label="Render telemetry"><div className="hud-head"><span className="hud-dot" /> RENDER CORE <span className="hud-close">×</span></div><div className="hud-stats"><div><span className="mono">FPS</span><strong>60</strong></div><div><span className="mono">GPU</span><strong>42%</strong></div><div><span className="mono">DT</span><strong>0.016</strong></div></div><div className="hud-toggle"><span className="mono">REPRESENTATION</span><button onClick={() => setRepresentation(representation === 'SCHR' ? 'HEIS' : 'SCHR')} aria-label="Toggle quantum representation"><span className={representation === 'SCHR' ? 'active' : ''}>SCHR</span><span className={representation === 'HEIS' ? 'active' : ''}>HEIS</span></button></div></aside>
@@ -287,7 +415,7 @@ function ArticleArchive({ items, onOpen }) {
       {items.length === 0 && <div className="article-empty"><FileText size={18} /><span>No field notes indexed yet. Add a Markdown file to <code>src/content/</code>.</span></div>}
       {items.map((article, index) => <button className="article-row" key={article.id} onClick={() => onOpen(article)}>
         <span className="article-index mono">{String(index + 1).padStart(2, '0')}</span>
-        <span className="article-main"><span className="article-kicker mono"><span>{article.category}</span><span>{article.displayDate}</span></span><strong>{article.title}</strong><span className="article-excerpt">{article.excerpt}</span></span>
+        <span className="article-main" lang={article.language}><span className="article-kicker mono"><span>{article.category}</span><span>{article.displayDate}</span></span><strong>{article.title}</strong><span className="article-excerpt">{article.excerpt}</span></span>
         <span className="article-side"><span className="mono">{article.readTime}</span><ArrowUpRight size={15} /></span>
       </button>)}
     </div>
@@ -353,12 +481,11 @@ function App() {
     <header id="top" className="topbar"><a className="brand" href="#top"><span className="brand-symbol">ψ</span><span>greenthree</span><em>blog</em><small>// QUANTUM_CORE</small></a><nav className="main-nav"><a className="active" href="#quantum">QUANTUM</a><a href="#algorithms">ALGORITHMS</a><a href="#articles">NOTEBOOK</a><a href="#research">RESEARCH</a><a href="#resources">RESOURCES</a></nav><div className="top-actions"><span className="mono">SYS.08 / 24</span><button className="icon-button menu-trigger" onClick={() => setMenuOpen(true)} aria-label="Open navigation"><Menu size={16} /></button></div></header>
     <main className="content-grid">
       <div className="primary-column">
-        <section id="quantum" className="hero-grid"><div className="panel bloch-card"><PanelTitle icon={<Atom size={14} />} title="STATE VECTOR / BLOCH SPHERE" meta={<span className="interactive-meta"><Hand size={11} /> INTERACTIVE</span>} tone="cyan" /><div className="bloch-stage"><BlochSphere phase={phase} onPhase={setPhase} /><div className="axis-note mono">α = {Math.cos(phase * 0.017).toFixed(2)} + {Math.sin(phase * 0.017).toFixed(2)}i</div></div><div className="state-row"><button className="state-button">STATE |ψ₀⟩</button><span className="mono">θ {phase}° / φ 0.82π</span><button className="state-button">STATE |ψ₁⟩</button></div></div><div className="panel hero-copy"><span className="mono eyebrow">PHYSICS STUDENT BLOG / 001</span><h1>Quantum<br /><span>frontiers</span> &<br />algorithmic<br />odysseys</h1><p>Notes from the overlap of rigorous physics, elegant algorithms, and the code that lets ideas move.</p><button className="primary-button" onClick={() => document.getElementById('algorithms')?.scrollIntoView({ behavior: 'smooth' })}>EXPLORE THE NOTEBOOK <ChevronRight size={15} /></button></div></section>
-        <div className="winner-strip"><span className="winner-mark"><Sparkles size={18} /></span><strong>WINNER / AWWWARDS SITE OF THE DAY /</strong><span>APPRECIATED FOR INNOVATIVE DESIGN & CODE</span><span className="winner-badge">W</span></div>
+        <section id="quantum" className="hero-grid"><div className="panel bloch-card"><PanelTitle icon={<Atom size={14} />} title="STATE VECTOR / BLOCH SPHERE" meta={<span className="interactive-meta"><Hand size={11} /> INTERACTIVE</span>} tone="cyan" /><div className="bloch-stage"><BlochSphere phase={phase} onPhase={setPhase} /><div className="axis-note mono">α = {formatComplex(Math.cos(phase * Math.PI / 180), Math.sin(phase * Math.PI / 180))}</div></div><div className="state-row"><button className="state-button">STATE |ψ₀⟩</button><span className="mono">θ {phase}° / φ 0.82π</span><button className="state-button">STATE |ψ₁⟩</button></div></div><div className="panel hero-copy"><span className="mono eyebrow">PHYSICS STUDENT BLOG / 001</span><h1>Quantum<br /><span>frontiers</span> &<br />algorithmic<br />odysseys</h1><p>Notes from the overlap of rigorous physics, elegant algorithms, and the code that lets ideas move.</p><button className="primary-button" onClick={() => document.getElementById('algorithms')?.scrollIntoView({ behavior: 'smooth' })}>EXPLORE THE NOTEBOOK <ChevronRight size={15} /></button></div></section>
         <ArticleArchive items={articles} onOpen={openArticle} />
-        <section id="algorithms" className="lower-grid"><div className="panel code-card"><PanelTitle icon={<Code2 size={14} />} title="IMPLEMENTING SHOR'S ALGORITHM" meta="PYTHON / 03:18" tone="amber" /><pre><code><span className="code-purple">def</span> quantum_factor(n):{`\n`}  <span className="code-blue">a</span> = random_coprime(n){`\n`}  r = <span className="code-cyan">find_period</span>(a, n){`\n`}  <span className="code-purple">return</span> gcd(a**(r//2) - 1, n)</code></pre><div className="code-foot mono"><span>Featured in / quantum algorithms</span><span>O(log³ N)</span></div></div><div className="panel equation-card"><PanelTitle icon={<Sigma size={14} />} title="VARIATIONAL EIGENVALUE" meta="DERIVATION / 07" tone="violet" /><div className="formula"><MathFormula expression={String.raw`\mathcal{E}(\theta) = \langle \psi(\theta) \vert \hat{H} \vert \psi(\theta) \rangle`} display /><small>minimize over parameterized states</small></div><p>Quantum entanglement explains the unity of an approximation scheme. Small inputs, large questions.</p><div className="matrix-lines mono">[ 1  0  −β ]<br />[ 0  α   0 ]<br />[ β  0   1 ]</div></div><CircuitCard /><div id="research" className="panel topology-card"><PanelTitle icon={<GitBranch size={14} />} title="COMPETITIVE PROGRAMMING STRATEGIES" meta="GRAPH / 12 NODES" tone="crimson" /><div className="topology-body"><div className="graph-map"><span className="node n1">A</span><span className="node n2">B</span><span className="node n3">C</span><span className="node n4">D</span><span className="node n5">E</span><i className="edge e1" /><i className="edge e2" /><i className="edge e3" /><i className="edge e4" /></div><pre className="tiny-code"><code><span className="code-purple">struct</span> Edge {`{`}<br />  <span className="code-cyan">int</span> to, cost;<br />  <span className="code-cyan">bool</span> used;<br />{`}`}</code></pre></div><div className="topology-footer mono"><span>minimum cost maximum flow</span><span>O(V²E)</span></div></div><div className="panel tips-card"><PanelTitle icon={<CircleHelp size={14} />} title="QUICK TIPS" meta="FIELD NOTES" tone="cyan" /><div className="tips-list"><button onClick={() => setSelectedTopic('Complexity compass')}><Binary size={16} /> <span>Read the complexity first</span><ChevronRight size={14} /></button><button onClick={() => setSelectedTopic('Hilbert space')}><Orbit size={16} /> <span>Keep a Hilbert space</span><ChevronRight size={14} /></button><button onClick={() => setSelectedTopic('Ship the prototype')}><Zap size={16} /> <span>Ship the prototype</span><ChevronRight size={14} /></button></div></div></section>
+        <section id="algorithms" className="lower-grid"><div className="panel code-card"><PanelTitle icon={<Code2 size={14} />} title="IMPLEMENTING SHOR'S ALGORITHM" meta="PYTHON / 03:18" tone="amber" /><pre><code><span className="code-purple">def</span> quantum_factor(n):{`\n`}  <span className="code-blue">a</span> = random_coprime(n){`\n`}  r = <span className="code-cyan">find_period</span>(a, n){`\n`}  <span className="code-purple">return</span> gcd(a**(r//2) - 1, n)</code></pre><div className="code-foot mono"><span>Featured in / quantum algorithms</span><MathFormula className="complexity-formula" expression={String.raw`\mathcal{O}((\log N)^3)`} /></div></div><div className="panel equation-card"><PanelTitle icon={<Sigma size={14} />} title="VARIATIONAL EIGENVALUE" meta="DERIVATION / 07" tone="violet" /><div className="formula"><MathFormula expression={String.raw`\mathcal{E}(\theta)=\langle\psi(\theta)\rvert\hat{H}\lvert\psi(\theta)\rangle`} display /><small>minimize over parameterized states</small></div><p>Quantum entanglement explains the unity of an approximation scheme. Small inputs, large questions.</p><div className="matrix-lines mono">[ 1  0  −β ]<br />[ 0  α   0 ]<br />[ β  0   1 ]</div></div><CircuitCard /><div id="research" className="panel topology-card"><PanelTitle icon={<GitBranch size={14} />} title="COMPETITIVE PROGRAMMING STRATEGIES" meta="GRAPH / 12 NODES" tone="crimson" /><div className="topology-body"><div className="graph-map"><span className="node n1">A</span><span className="node n2">B</span><span className="node n3">C</span><span className="node n4">D</span><span className="node n5">E</span><i className="edge e1" /><i className="edge e2" /><i className="edge e3" /><i className="edge e4" /></div><pre className="tiny-code"><code><span className="code-purple">struct</span> Edge {`{`}<br />  <span className="code-cyan">int</span> to, cost;<br />  <span className="code-cyan">bool</span> used;<br />{`}`}</code></pre></div><div className="topology-footer mono"><span>minimum cost maximum flow</span><MathFormula className="complexity-formula" expression={String.raw`\mathcal{O}(F E \log V)`} /></div></div><div className="panel tips-card"><PanelTitle icon={<CircleHelp size={14} />} title="QUICK TIPS" meta="FIELD NOTES" tone="cyan" /><div className="tips-list"><button onClick={() => setSelectedTopic('Complexity compass')}><Binary size={16} /> <span>Read the complexity first</span><ChevronRight size={14} /></button><button onClick={() => setSelectedTopic('Hilbert space')}><Orbit size={16} /> <span>Keep a Hilbert space</span><ChevronRight size={14} /></button><button onClick={() => setSelectedTopic('Ship the prototype')}><Zap size={16} /> <span>Ship the prototype</span><ChevronRight size={14} /></button></div></div></section>
       </div>
-      <aside className="sidebar"><section className="panel wave-card"><PanelTitle icon={<Activity size={14} />} title="VECTOR WAVE" meta="Ψ(x,t)" tone="cyan" /><WaveCanvas /><div className="wave-formula mono"><MathFormula expression={String.raw`\int \Psi(x,t)\,dx = 1`} /></div><p>Visualizing vector wave mechanics. Follow interference patterns and probability amplitudes as they phase through a discrete lattice.</p></section><section className="panel topics-card"><PanelTitle icon={<Compass size={14} />} title="TRENDING TOPICS" meta="08 / 24" tone="violet" /><div className="topic-list">{topics.map(topic => <button key={topic} onClick={() => setSelectedTopic(topic)}>{topic}<ChevronRight size={12} /></button>)}</div></section><section className="panel achievements-card"><PanelTitle icon={<Radio size={14} />} title="LATEST ACHIEVEMENTS" meta="LOG / 04" tone="crimson" /><div className="achievement-list">{achievements.map(item => <div className="achievement" key={item.title}><span className={`achievement-dot ${item.tone}`} /><div><strong>{item.title}</strong><span className="mono">{item.date}</span></div></div>)}</div></section><section id="resources" className="sidebar-footer panel"><div><span className="mono">FOOTER</span><p>Site & lab journal by greenthree. Built from first principles.</p></div><div><span className="mono">SOCIAL</span><a href="https://github.com" target="_blank" rel="noreferrer">GitHub <ChevronRight size={12} /></a><a href="mailto:hello@greenthree.blog">Contact <ChevronRight size={12} /></a></div><div className="footer-atom"><Atom size={34} /></div></section></aside>
+      <aside className="sidebar"><section className="panel wave-card"><PanelTitle icon={<Activity size={14} />} title="VECTOR WAVE" meta="ψ(x,t)" tone="cyan" /><WaveCanvas /><div className="wave-formula mono"><MathFormula expression={String.raw`\int \lvert\psi(x,t)\rvert^2\,dx = 1`} /></div><p>Visualizing vector wave mechanics. Follow interference patterns and probability amplitudes as they phase through a discrete lattice.</p></section><section className="panel topics-card"><PanelTitle icon={<Compass size={14} />} title="TRENDING TOPICS" meta="08 / 24" tone="violet" /><div className="topic-list">{topics.map(topic => <button key={topic} onClick={() => setSelectedTopic(topic)}>{topic}<ChevronRight size={12} /></button>)}</div></section><section className="panel achievements-card"><PanelTitle icon={<Radio size={14} />} title="LATEST ACHIEVEMENTS" meta="LOG / 04" tone="crimson" /><div className="achievement-list">{achievements.map(item => <div className="achievement" key={item.title}><span className={`achievement-dot ${item.tone}`} /><div><strong>{item.title}</strong><span className="mono">{item.date}</span></div></div>)}</div></section><LiveSubmissionFeed /><section id="resources" className="sidebar-footer panel"><div><span className="mono">FOOTER</span><p>Site & lab journal by greenthree. Built from first principles.</p></div><div><span className="mono">SOCIAL</span><a href="https://github.com/greenthree" target="_blank" rel="noreferrer">GitHub <ChevronRight size={12} /></a><a href="mailto:hello@greenthree.blog">Contact <ChevronRight size={12} /></a></div><div className="footer-atom"><Atom size={34} /></div></section></aside>
     </main>
     <HudDock representation={representation} setRepresentation={setRepresentation} />
     <footer className="bottom-line mono"><span>ψ(x,t) // QUANTUM_CORE</span><span>ALL SYSTEMS NOMINAL / 2024—∞</span></footer>

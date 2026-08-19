@@ -14,7 +14,7 @@ date: "2024-08-18"
 lang: "zh-CN"
 category: "RESEARCH"
 excerpt: "列表里显示的一句话摘要。"
-readTime: "05 分钟"
+readTime: "08 MIN"
 tags:
   - physics
   - algorithms

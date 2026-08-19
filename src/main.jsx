@@ -36,14 +36,14 @@ const UI_COPY = {
     blochLabel: '交互式布洛赫球。使用指针或方向键旋转态矢量。',
     physicsBlog: '物理系学生博客 / 001',
     hero: { line1: '量子', accent: '前沿', joiner: '与', line3: '算法', line4: '漫游' },
-    heroDescription: '记录严谨物理、优雅算法，以及让思想开始运动的代码。',
+    heroDescription: '记录严谨物理与优雅算法，也记录让思想运动起来的代码。',
     explore: '浏览文章', archive: '笔记归档', articleUnit: '篇文章',
     emptyArchive: '尚未索引文章。请在 src/content/ 中添加 Markdown 文件。',
-    archiveInstruction: '放入 .MD 文件 / 重新构建 / 发布', hashRoutes: '固定链接已启用',
-    wave: '矢量波', waveDescription: '观察矢量波力学中的干涉图样与概率振幅如何穿过离散晶格。',
+    archiveInstruction: '导入 .MD 文件 / 重新构建 / 发布', hashRoutes: '固定链接已启用',
+    wave: '波函数演化 // WAVE_FUNCTION', waveDescription: '观察波包干涉、概率振幅与相位如何在离散晶格中演化。',
     waveLabel: '概率振幅波形', amplitudeLabel: '概率振幅', topics: '热门主题',
     footer: '页脚', social: '社交', about: 'greenthree 的网站与实验笔记，从第一性原理开始构建。', contact: '联系',
-    renderCore: '渲染核心', representation: '表象', renderTelemetry: '渲染遥测',
+    renderCore: '性能监控', representation: '表象', renderTelemetry: '渲染遥测', openTelemetry: '展开性能监控', closeTelemetry: '收起性能监控',
     state: '态', closeArticle: '关闭文章', closeTopic: '关闭主题', endNote: '文章结束', returnArchive: '返回归档',
     openMenu: '打开导航', closeMenu: '关闭导航', languageControl: '切换网站语言',
     query: '检索', topicQueued: '该主题已进入笔记索引。下一篇场记将把符号连接到可运行实验。',
@@ -59,10 +59,10 @@ const UI_COPY = {
     explore: 'EXPLORE THE NOTEBOOK', archive: 'NOTEBOOK ARCHIVE', articleUnit: 'ARTICLES',
     emptyArchive: 'No field notes indexed yet. Add a Markdown file to src/content/.',
     archiveInstruction: 'DROP A .MD FILE / REBUILD / PUBLISH', hashRoutes: 'HASH ROUTES ENABLED',
-    wave: 'VECTOR WAVE', waveDescription: 'Visualizing vector wave mechanics as interference patterns and probability amplitudes phase through a discrete lattice.',
+    wave: 'WAVE FUNCTION EVOLUTION', waveDescription: 'Visualizing wave-packet interference, probability amplitudes, and phase evolution across a discrete lattice.',
     waveLabel: 'Probability amplitude waveform', amplitudeLabel: 'probability amplitude', topics: 'TRENDING TOPICS',
     footer: 'FOOTER', social: 'SOCIAL', about: 'Site and lab journal by greenthree. Built from first principles.', contact: 'Contact',
-    renderCore: 'RENDER CORE', representation: 'REPRESENTATION', renderTelemetry: 'Render telemetry',
+    renderCore: 'RENDER CORE', representation: 'REPRESENTATION', renderTelemetry: 'Render telemetry', openTelemetry: 'Expand performance telemetry', closeTelemetry: 'Collapse performance telemetry',
     state: 'STATE', closeArticle: 'Close article', closeTopic: 'Close topic', endNote: 'END OF NOTE', returnArchive: 'RETURN TO ARCHIVE',
     openMenu: 'Open navigation', closeMenu: 'Close navigation', languageControl: 'Switch site language',
     query: 'QUERY', topicQueued: 'This topic is queued in the notebook index. The next field note will connect the notation to a runnable experiment.',
@@ -368,7 +368,11 @@ function LanguageSwitch({ locale, onChange, label }) {
 }
 
 function HudDock({ representation, setRepresentation, copy }) {
-  return <aside className="hud-dock" aria-label={copy.renderTelemetry}><div className="hud-head"><span className="hud-dot" /> {copy.renderCore} <span className="hud-close"><X size={10} aria-hidden="true" /></span></div><div className="hud-stats"><div><span className="mono">FPS</span><strong>60</strong></div><div><span className="mono">GPU</span><strong>42%</strong></div><div><span className="mono">DT</span><strong>0.016</strong></div></div><div className="hud-toggle"><span className="mono">{copy.representation}</span><button onClick={() => setRepresentation(representation === 'SCHR' ? 'HEIS' : 'SCHR')} aria-label={copy.representation}><span className={representation === 'SCHR' ? 'active' : ''}>SCHR</span><span className={representation === 'HEIS' ? 'active' : ''}>HEIS</span></button></div></aside>
+  const [expanded, setExpanded] = useState(false)
+  if (!expanded) {
+    return <button type="button" className="hud-pill mono" onClick={() => setExpanded(true)} aria-expanded="false" aria-label={copy.openTelemetry}><span className="hud-dot" /><Activity size={12} aria-hidden="true" /><span>60 FPS</span></button>
+  }
+  return <aside className="hud-dock" aria-label={copy.renderTelemetry}><div className="hud-head"><span className="hud-dot" /> {copy.renderCore} <button type="button" className="hud-close" onClick={() => setExpanded(false)} aria-label={copy.closeTelemetry}><X size={10} aria-hidden="true" /></button></div><div className="hud-stats"><div><span className="mono">FPS</span><strong>60</strong></div><div><span className="mono">GPU</span><strong>42%</strong></div><div><span className="mono">DT</span><strong>0.016</strong></div></div><div className="hud-toggle"><span className="mono">{copy.representation}</span><button onClick={() => setRepresentation(representation === 'SCHR' ? 'HEIS' : 'SCHR')} aria-label={copy.representation}><span className={representation === 'SCHR' ? 'active' : ''}>SCHR</span><span className={representation === 'HEIS' ? 'active' : ''}>HEIS</span></button></div></aside>
 }
 
 function ArticleArchive({ items, onOpen, copy }) {
@@ -465,7 +469,7 @@ function App() {
           <div className="panel bloch-card">
             <PanelTitle icon={<Atom size={14} />} title={copy.stateVector} meta={<span className="interactive-meta"><Hand size={11} /> {copy.interactive}</span>} tone="cyan" />
             <div className="bloch-stage"><BlochSphere phase={phase} onPhase={setPhase} ariaLabel={copy.blochLabel} /><div className="axis-note mono">α = {formatComplex(Math.cos(phase * Math.PI / 180), Math.sin(phase * Math.PI / 180))}</div></div>
-            <div className="state-row"><button className="state-button">{copy.state} |ψ₀⟩</button><span className="mono">θ {phase}° / φ 0.82π</span><button className="state-button">{copy.state} |ψ₁⟩</button></div>
+            <div className="state-row"><button className="state-button">{copy.state} |0⟩</button><span className="mono">θ {phase}° / φ 0.82π</span><button className="state-button">{copy.state} |1⟩</button></div>
           </div>
           <div className="panel hero-copy" lang={locale === 'zh' ? 'zh-CN' : 'en'}>
             <span className="mono eyebrow">{copy.physicsBlog}</span>
@@ -477,7 +481,7 @@ function App() {
         <ArticleArchive items={localizedArticles} onOpen={openArticle} copy={copy} />
       </div>
       <aside className="sidebar">
-        <section className="panel wave-card"><PanelTitle icon={<Activity size={14} />} title={copy.wave} meta="ψ(x,t)" tone="cyan" /><WaveCanvas ariaLabel={copy.waveLabel} amplitudeLabel={copy.amplitudeLabel} /><div className="wave-formula mono"><MathFormula expression={String.raw`\int \lvert\psi(x,t)\rvert^2\,dx = 1`} /></div><p>{copy.waveDescription}</p></section>
+        <section className="panel wave-card"><PanelTitle icon={<Activity size={14} />} title={copy.wave} meta="ψ(x,t)" tone="cyan" /><WaveCanvas ariaLabel={copy.waveLabel} amplitudeLabel={copy.amplitudeLabel} /><div className="wave-formula mono"><MathFormula expression={String.raw`\int \lvert\psi(x, t)\rvert^2\,\mathrm{d}x = 1`} /></div><p>{copy.waveDescription}</p></section>
         <section id="topics" className="panel topics-card"><PanelTitle icon={<Compass size={14} />} title={copy.topics} meta="08 / 24" tone="violet" /><div className="topic-list">{topicCatalog.map(topic => <button key={topic.id} onClick={() => setSelectedTopic(topic.id)}>{topic[locale]}<ChevronRight size={12} /></button>)}</div></section>
         <section id="resources" className="sidebar-footer panel"><div><span className="mono">{copy.footer}</span><p>{copy.about}</p></div><div><span className="mono">{copy.social}</span><a href="https://github.com/greenthree" target="_blank" rel="noreferrer">GitHub <ChevronRight size={12} /></a><a href="mailto:hello@greenthree.blog">{copy.contact} <ChevronRight size={12} /></a></div><div className="footer-atom"><Atom size={34} /></div></section>
       </aside>

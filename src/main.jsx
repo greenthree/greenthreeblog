@@ -668,6 +668,14 @@ function App() {
   const [articleViews, incrementArticleView] = useArticleViews(articleIds)
   const articleMap = useMemo(() => new Map(articles.map(article => [article.id, article])), [])
   const localizedArticles = useMemo(() => articles.map(article => ({ ...localizeArticle(article, locale), view: articleViews[article.id] })), [articleViews, locale])
+  const homepageArticles = useMemo(() => localizedArticles
+    .map((article, sourceIndex) => ({ article, sourceIndex }))
+    .sort((a, b) => {
+      const aViews = a.article.view?.status === 'ready' ? a.article.view.count : -1
+      const bViews = b.article.view?.status === 'ready' ? b.article.view.count : -1
+      return bViews - aViews || a.sourceIndex - b.sourceIndex
+    })
+    .map(entry => entry.article), [localizedArticles])
   const visibleTopics = useMemo(() => topicCatalog
     .map((topic, sourceIndex) => {
       const topicViews = topic.articleIds.map(articleId => articleViews[articleId])
@@ -740,7 +748,7 @@ function App() {
             <a className="primary-button" href={atlasHref('articles')} target="_blank" rel="noreferrer">{copy.explore} <ChevronRight size={15} /></a>
           </div>
         </section>
-        <ArticleArchive items={localizedArticles} onOpen={openArticle} copy={copy} />
+        <ArticleArchive items={homepageArticles} onOpen={openArticle} copy={copy} />
       </div>
       <aside className="sidebar">
         <section className="panel wave-card"><PanelTitle icon={<Activity size={14} />} title={copy.wave} meta="ψ(x,t)" tone="cyan" /><WaveCanvas ariaLabel={copy.waveLabel} amplitudeLabel={copy.amplitudeLabel} /><div className="wave-formula mono"><MathFormula expression={String.raw`\int \lvert\psi(x, t)\rvert^2\,\mathrm{d}x = 1`} /></div><p>{copy.waveDescription}</p></section>

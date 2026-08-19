@@ -10,9 +10,15 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
+    "katex": "^0.16.47",
     "lucide-react": "^0.468.0",
     "react": "latest",
     "react-dom": "latest",
-    "vite": "latest"
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "vite": "latest",
+    "yaml": "^2.9.0"
   }
 }

@@ -18,17 +18,6 @@ import { parse as parseYaml } from 'yaml'
 import { MarkdownRenderer, MathFormula } from './math.jsx'
 import './styles.css'
 
-const topicCatalog = [
-  { id: 'qiskit', zh: 'Qiskit', en: 'Qiskit' },
-  { id: 'quantum-advantage', zh: '量子优势', en: 'Quantum Advantage' },
-  { id: 'vector-calculus', zh: '向量分析', en: 'Vector Calculus' },
-  { id: 'asymptotics', zh: '渐近分析', en: 'Asymptotics' },
-  { id: 'graph-theory', zh: '图论', en: 'Graph Theory' },
-  { id: 'nisq', zh: 'NISQ', en: 'NISQ' },
-  { id: 'simulated-annealing', zh: '模拟退火', en: 'Simulated Annealing' },
-  { id: 'codeforces', zh: 'Codeforces', en: 'Codeforces' }
-]
-
 const UI_COPY = {
   zh: {
     nav: { quantum: '量子态', notebook: '文章', topics: '主题', resources: '资源' },
@@ -46,8 +35,8 @@ const UI_COPY = {
     renderCore: '性能监控', representation: '表象', renderTelemetry: '渲染遥测', openTelemetry: '展开性能监控', closeTelemetry: '收起性能监控',
     state: '态', closeArticle: '关闭文章', closeTopic: '关闭主题', endNote: '文章结束', returnArchive: '返回归档',
     openMenu: '打开导航', closeMenu: '关闭导航', languageControl: '切换网站语言',
-    query: '检索', topicQueued: '该主题已进入笔记索引。下一篇场记将把符号连接到可运行实验。',
-    topicStatus: '已索引 / 等待观测', nominal: '所有系统正常 / 2024—∞', stateOnline: '态矢量在线'
+    query: '检索', topicQueued: '该主题来自当前文章索引。打开对应场记，可继续查看相关实验、代码与推导。',
+    topicStatus: '已索引 / 当前文章', nominal: '所有系统正常 / 2024—∞', stateOnline: '态矢量在线'
   },
   en: {
     nav: { quantum: 'QUANTUM', notebook: 'NOTEBOOK', topics: 'TOPICS', resources: 'RESOURCES' },
@@ -65,8 +54,8 @@ const UI_COPY = {
     renderCore: 'RENDER CORE', representation: 'REPRESENTATION', renderTelemetry: 'Render telemetry', openTelemetry: 'Expand performance telemetry', closeTelemetry: 'Collapse performance telemetry',
     state: 'STATE', closeArticle: 'Close article', closeTopic: 'Close topic', endNote: 'END OF NOTE', returnArchive: 'RETURN TO ARCHIVE',
     openMenu: 'Open navigation', closeMenu: 'Close navigation', languageControl: 'Switch site language',
-    query: 'QUERY', topicQueued: 'This topic is queued in the notebook index. The next field note will connect the notation to a runnable experiment.',
-    topicStatus: 'INDEXED / WAITING FOR OBSERVATION', nominal: 'ALL SYSTEMS NOMINAL / 2024—∞', stateOnline: 'STATE VECTOR ONLINE'
+    query: 'QUERY', topicQueued: 'This topic comes from the live article index. Open a field note to inspect the related experiments, code, and derivations.',
+    topicStatus: 'INDEXED / LIVE ARTICLES', nominal: 'ALL SYSTEMS NOMINAL / 2024—∞', stateOnline: 'STATE VECTOR ONLINE'
   }
 }
 
@@ -181,6 +170,40 @@ function localizeArticle(article, locale) {
   const translation = article.translations[locale] || article.translations.zh || article.translations.en
   return { ...article, ...translation, displayDate: formatArticleDate(article.date, translation.language) }
 }
+
+function createTopicCatalog(items) {
+  const topics = []
+  const seenZh = new Set()
+  const seenEn = new Set()
+  const addTopic = (zh, en) => {
+    const zhLabel = String(zh || '').trim()
+    const enLabel = String(en || '').trim()
+    if (!zhLabel && !enLabel) return
+    const zhKey = zhLabel.toLowerCase()
+    const enKey = enLabel.toLowerCase()
+    const zhUnique = Boolean(zhLabel) && !seenZh.has(zhKey)
+    const enUnique = Boolean(enLabel) && !seenEn.has(enKey)
+    if (!zhUnique && !enUnique) return
+    if (zhUnique) seenZh.add(zhKey)
+    if (enUnique) seenEn.add(enKey)
+    topics.push({
+      id: `topic-${slugify(zhLabel || enLabel)}-${topics.length + 1}`,
+      zh: zhLabel || enLabel,
+      en: enLabel || zhLabel,
+      visibleIn: { zh: zhUnique, en: enUnique }
+    })
+  }
+  items.forEach(article => {
+    addTopic(article.translations.zh.category, article.translations.en.category)
+    const zhTags = article.translations.zh.tags || []
+    const enTags = article.translations.en.tags || []
+    const tagCount = Math.max(zhTags.length, enTags.length)
+    for (let index = 0; index < tagCount; index += 1) addTopic(zhTags[index], enTags[index])
+  })
+  return topics
+}
+
+const topicCatalog = createTopicCatalog(articles)
 
 function initialLocale() {
   try {
@@ -425,6 +448,7 @@ function App() {
   const [selectedArticle, setSelectedArticle] = useState(() => articleFromHash())
   const articleMap = useMemo(() => new Map(articles.map(article => [article.id, article])), [])
   const localizedArticles = useMemo(() => articles.map(article => localizeArticle(article, locale)), [locale])
+  const visibleTopics = topicCatalog.filter(topic => topic.visibleIn[locale])
   const localizedSelectedArticle = selectedArticle ? localizeArticle(selectedArticle, locale) : null
   const selectedTopicEntry = selectedTopic ? topicCatalog.find(topic => topic.id === selectedTopic) : null
   const copy = UI_COPY[locale]
@@ -482,7 +506,7 @@ function App() {
       </div>
       <aside className="sidebar">
         <section className="panel wave-card"><PanelTitle icon={<Activity size={14} />} title={copy.wave} meta="ψ(x,t)" tone="cyan" /><WaveCanvas ariaLabel={copy.waveLabel} amplitudeLabel={copy.amplitudeLabel} /><div className="wave-formula mono"><MathFormula expression={String.raw`\int \lvert\psi(x, t)\rvert^2\,\mathrm{d}x = 1`} /></div><p>{copy.waveDescription}</p></section>
-        <section id="topics" className="panel topics-card"><PanelTitle icon={<Compass size={14} />} title={copy.topics} meta="08 / 24" tone="violet" /><div className="topic-list">{topicCatalog.map(topic => <button key={topic.id} onClick={() => setSelectedTopic(topic.id)}>{topic[locale]}<ChevronRight size={12} /></button>)}</div></section>
+        <section id="topics" className="panel topics-card"><PanelTitle icon={<Compass size={14} />} title={copy.topics} meta={`${String(visibleTopics.length).padStart(2, '0')} / LIVE`} tone="violet" /><div className="topic-list">{visibleTopics.map(topic => <button key={topic.id} onClick={() => setSelectedTopic(topic.id)}>{topic[locale]}<ChevronRight size={12} /></button>)}</div></section>
         <section id="resources" className="sidebar-footer panel"><div><span className="mono">{copy.footer}</span><p>{copy.about}</p></div><div><span className="mono">{copy.social}</span><a href="https://github.com/greenthree" target="_blank" rel="noreferrer">GitHub <ChevronRight size={12} /></a><a href="mailto:hello@greenthree.blog">{copy.contact} <ChevronRight size={12} /></a></div><div className="footer-atom"><Atom size={34} /></div></section>
       </aside>
     </main>

@@ -2,15 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Activity,
+  ArrowLeft,
   ArrowUpRight,
   Atom,
   BookOpen,
   ChevronRight,
   Compass,
+  ExternalLink,
   FileText,
   Hand,
   Languages,
   Menu,
+  Search,
   Tag,
   X
 } from 'lucide-react'
@@ -58,6 +61,30 @@ const UI_COPY = {
     topicStatus: 'INDEXED / LIVE ARTICLES', nominal: 'ALL SYSTEMS NOMINAL / 2024—∞', stateOnline: 'STATE VECTOR ONLINE'
   }
 }
+
+const ATLAS_COPY = {
+  zh: {
+    articles: { eyebrow: 'NOTEBOOK INDEX', title: '全部文章', description: '按时间倒序排列的全部场记、实验记录与工程笔记。', search: '搜索标题、摘要、分类或标签', count: '篇文章', empty: '没有匹配的文章。' },
+    topics: { eyebrow: 'KNOWLEDGE MANIFOLD', title: '主题图谱', description: '从当前文章的分类与标签生成主题索引，并在每个主题下聚合相关文章。', search: '搜索主题或文章', count: '个主题', articles: '篇相关文章', empty: '没有匹配的主题。' },
+    resources: { eyebrow: 'RESOURCE ATLAS', title: '资源导航', description: '连接文章、主题与项目入口的精选知识节点。', search: '搜索资源名称、描述或域名', count: '个资源', categories: '个分类', empty: '没有匹配的资源。', open: '打开资源' },
+    back: '返回首页', result: '当前结果', clear: '清除搜索'
+  },
+  en: {
+    articles: { eyebrow: 'NOTEBOOK INDEX', title: 'All Articles', description: 'Every field note, experiment log, and engineering journal ordered by date.', search: 'Search titles, summaries, categories, or tags', count: 'ARTICLES', empty: 'No matching articles.' },
+    topics: { eyebrow: 'KNOWLEDGE MANIFOLD', title: 'Topic Atlas', description: 'A live index generated from article categories and tags, with related notes grouped under each topic.', search: 'Search topics or articles', count: 'TOPICS', articles: 'RELATED ARTICLES', empty: 'No matching topics.' },
+    resources: { eyebrow: 'RESOURCE ATLAS', title: 'Resource Atlas', description: 'Curated knowledge nodes connecting the notebook, topics, and project work.', search: 'Search resource names, descriptions, or domains', count: 'RESOURCES', categories: 'CATEGORIES', empty: 'No matching resources.', open: 'Open resource' },
+    back: 'Back home', result: 'CURRENT RESULTS', clear: 'Clear search'
+  }
+}
+
+const RESOURCE_CATALOG = [
+  { category: { zh: '站点索引', en: 'SITE INDEX' }, title: { zh: '全部文章', en: 'All Articles' }, description: { zh: '按时间浏览所有中英文场记与实验记录。', en: 'Browse every bilingual field note and experiment log by date.' }, href: '?view=articles', icon: BookOpen },
+  { category: { zh: '站点索引', en: 'SITE INDEX' }, title: { zh: '主题图谱', en: 'Topic Atlas' }, description: { zh: '按分类与标签查看当前文章知识图谱。', en: 'Explore the live knowledge graph by category and tag.' }, href: '?view=topics', icon: Compass },
+  { category: { zh: '项目', en: 'PROJECTS' }, title: { zh: 'ProbHub', en: 'ProbHub' }, description: { zh: '可复现、可审计的算法竞赛出题工作流。', en: 'A reproducible and auditable competitive programming workflow.' }, href: 'https://github.com/greenthree/ProbHub-skill', icon: FileText },
+  { category: { zh: '项目', en: 'PROJECTS' }, title: { zh: 'greenthree GitHub', en: 'greenthree on GitHub' }, description: { zh: '代码、实验与正在进行的项目。', en: 'Code, experiments, and work in progress.' }, href: 'https://github.com/greenthree', icon: ExternalLink },
+  { category: { zh: '学习工具', en: 'LEARNING TOOLS' }, title: { zh: 'DeepTutor', en: 'DeepTutor' }, description: { zh: '开源 AI 学习与研究工作台。', en: 'An open-source AI workbench for learning and research.' }, href: 'https://github.com/HKUDS/DeepTutor', icon: Atom },
+  { category: { zh: '开发工具', en: 'DEVELOPER TOOLS' }, title: { zh: 'Firecrawl', en: 'Firecrawl' }, description: { zh: '面向 AI 工作流的网页搜索与内容提取工具。', en: 'Web search and content extraction for AI workflows.' }, href: 'https://www.firecrawl.dev/', icon: Search }
+]
 
 const articleModules = import.meta.glob('./content/*.md', { query: '?raw', import: 'default', eager: true })
 
@@ -175,7 +202,7 @@ function createTopicCatalog(items) {
   const topics = []
   const seenZh = new Set()
   const seenEn = new Set()
-  const addTopic = (zh, en) => {
+  const addTopic = (zh, en, articleId) => {
     const zhLabel = String(zh || '').trim()
     const enLabel = String(en || '').trim()
     if (!zhLabel && !enLabel) return
@@ -183,22 +210,27 @@ function createTopicCatalog(items) {
     const enKey = enLabel.toLowerCase()
     const zhUnique = Boolean(zhLabel) && !seenZh.has(zhKey)
     const enUnique = Boolean(enLabel) && !seenEn.has(enKey)
-    if (!zhUnique && !enUnique) return
+    if (!zhUnique && !enUnique) {
+      const existing = topics.find(topic => topic.zh.toLowerCase() === zhKey || topic.en.toLowerCase() === enKey)
+      if (existing && articleId && !existing.articleIds.includes(articleId)) existing.articleIds.push(articleId)
+      return
+    }
     if (zhUnique) seenZh.add(zhKey)
     if (enUnique) seenEn.add(enKey)
     topics.push({
       id: `topic-${slugify(zhLabel || enLabel)}-${topics.length + 1}`,
       zh: zhLabel || enLabel,
       en: enLabel || zhLabel,
-      visibleIn: { zh: zhUnique, en: enUnique }
+      visibleIn: { zh: zhUnique, en: enUnique },
+      articleIds: articleId ? [articleId] : []
     })
   }
   items.forEach(article => {
-    addTopic(article.translations.zh.category, article.translations.en.category)
+    addTopic(article.translations.zh.category, article.translations.en.category, article.id)
     const zhTags = article.translations.zh.tags || []
     const enTags = article.translations.en.tags || []
     const tagCount = Math.max(zhTags.length, enTags.length)
-    for (let index = 0; index < tagCount; index += 1) addTopic(zhTags[index], enTags[index])
+    for (let index = 0; index < tagCount; index += 1) addTopic(zhTags[index], enTags[index], article.id)
   })
   return topics
 }
@@ -439,7 +471,98 @@ function ArticleReader({ article, onClose, copy, locale, onLocaleChange }) {
   </div>
 }
 
+function atlasHref(view) {
+  return view ? `?view=${view}` : './'
+}
+
+function AtlasHeader({ locale, onLocaleChange, copy, activeView }) {
+  return <header className="topbar atlas-topbar">
+    <a className="brand" href="./"><span className="brand-symbol">ψ</span><span>greenthree</span><em>blog</em><small>// QUANTUM_CORE</small></a>
+    <nav className="main-nav">
+      <a href="./#quantum">{copy.nav.quantum}</a>
+      <a className={activeView === 'articles' ? 'active' : ''} href={atlasHref('articles')} target="_blank" rel="noreferrer">{copy.nav.notebook}</a>
+      <a className={activeView === 'topics' ? 'active' : ''} href={atlasHref('topics')} target="_blank" rel="noreferrer">{copy.nav.topics}</a>
+      <a className={activeView === 'resources' ? 'active' : ''} href={atlasHref('resources')} target="_blank" rel="noreferrer">{copy.nav.resources}</a>
+    </nav>
+    <div className="top-actions"><LanguageSwitch locale={locale} onChange={onLocaleChange} label={copy.languageControl} /><a className="icon-button" href="./" aria-label={ATLAS_COPY[locale].back}><ArrowLeft size={16} /></a></div>
+  </header>
+}
+
+function AtlasHero({ eyebrow, title, description, stats }) {
+  return <section className="atlas-hero">
+    <div><span className="mono atlas-eyebrow">{eyebrow}</span><h1>{title}</h1><p>{description}</p></div>
+    <div className="atlas-stats">{stats.map(stat => <div key={stat.label}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}</div>
+  </section>
+}
+
+function AtlasSearch({ value, onChange, placeholder, resultLabel, resultCount }) {
+  return <section className="atlas-search-panel">
+    <label><span className="mono">{resultLabel}</span><div><Search size={18} /><input type="search" value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} /></div></label>
+    <span className="atlas-result-count mono">{String(resultCount).padStart(2, '0')} / INDEXED</span>
+  </section>
+}
+
+function ArticleAtlas({ locale, items, onOpen, copy, onLocaleChange }) {
+  const atlasCopy = ATLAS_COPY[locale].articles
+  const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim().toLowerCase()
+  const filtered = items.filter(article => !normalizedQuery || [article.title, article.excerpt, article.category, ...article.tags].join(' ').toLowerCase().includes(normalizedQuery))
+  const grouped = filtered.reduce((years, article) => {
+    const year = article.date.slice(0, 4) || 'UNDATED'
+    if (!years[year]) years[year] = []
+    years[year].push(article)
+    return years
+  }, {})
+  return <AtlasPage locale={locale} activeView="articles" copy={copy} onLocaleChange={onLocaleChange}>
+    <AtlasHero eyebrow={atlasCopy.eyebrow} title={atlasCopy.title} description={atlasCopy.description} stats={[{ value: items.length, label: atlasCopy.count }, { value: Object.keys(grouped).length, label: locale === 'zh' ? '个年份' : 'YEARS' }]} />
+    <AtlasSearch value={query} onChange={setQuery} placeholder={atlasCopy.search} resultLabel={ATLAS_COPY[locale].result} resultCount={filtered.length} />
+    <div className="chronology">
+      {Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a)).map(([year, yearArticles]) => <section className="chronology-group" key={year}><div className="chronology-year"><span>{year}</span><small className="mono">{String(yearArticles.length).padStart(2, '0')} {atlasCopy.count}</small></div><div className="atlas-article-list">{yearArticles.map(article => <button key={article.id} onClick={() => onOpen(article)}><span className="mono">{article.displayDate}</span><div lang={article.language}><small>{article.category}</small><h2>{article.title}</h2><p>{article.excerpt}</p><div className="atlas-tags">{article.tags.slice(0, 4).map(tag => <span key={tag}>{tag}</span>)}</div></div><span className="atlas-read mono">{article.readTime}<ArrowUpRight size={16} /></span></button>)}</div></section>)}
+      {filtered.length === 0 && <p className="atlas-empty">{atlasCopy.empty}</p>}
+    </div>
+  </AtlasPage>
+}
+
+function TopicAtlas({ locale, items, topics, onOpen, copy, onLocaleChange }) {
+  const atlasCopy = ATLAS_COPY[locale].topics
+  const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim().toLowerCase()
+  const visibleTopics = topics.filter(topic => topic.visibleIn[locale]).map(topic => ({ ...topic, articles: topic.articleIds.map(id => items.find(article => article.id === id)).filter(Boolean) }))
+  const filtered = visibleTopics.filter(topic => !normalizedQuery || [topic[locale], ...topic.articles.flatMap(article => [article.title, article.excerpt])].join(' ').toLowerCase().includes(normalizedQuery))
+  return <AtlasPage locale={locale} activeView="topics" copy={copy} onLocaleChange={onLocaleChange}>
+    <AtlasHero eyebrow={atlasCopy.eyebrow} title={atlasCopy.title} description={atlasCopy.description} stats={[{ value: visibleTopics.length, label: atlasCopy.count }, { value: items.length, label: locale === 'zh' ? '篇文章' : 'ARTICLES' }]} />
+    <AtlasSearch value={query} onChange={setQuery} placeholder={atlasCopy.search} resultLabel={ATLAS_COPY[locale].result} resultCount={filtered.length} />
+    <div className="topic-atlas-grid">{filtered.map((topic, index) => <section className="topic-atlas-card" key={topic.id}><header><span className="mono">T.{String(index + 1).padStart(2, '0')}</span><strong>{String(topic.articles.length).padStart(2, '0')}</strong></header><h2>{topic[locale]}</h2><span className="mono topic-related">{atlasCopy.articles}</span><div>{topic.articles.map(article => <button key={article.id} onClick={() => onOpen(article)}><span>{article.title}</span><ChevronRight size={14} /></button>)}</div></section>)}</div>
+    {filtered.length === 0 && <p className="atlas-empty">{atlasCopy.empty}</p>}
+  </AtlasPage>
+}
+
+function ResourceAtlas({ locale, copy, onLocaleChange }) {
+  const atlasCopy = ATLAS_COPY[locale].resources
+  const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim().toLowerCase()
+  const filtered = RESOURCE_CATALOG.filter(resource => !normalizedQuery || [resource.title[locale], resource.description[locale], resource.href, resource.category[locale]].join(' ').toLowerCase().includes(normalizedQuery))
+  const groups = filtered.reduce((result, resource) => {
+    const category = resource.category[locale]
+    if (!result[category]) result[category] = []
+    result[category].push(resource)
+    return result
+  }, {})
+  const categoryCount = new Set(RESOURCE_CATALOG.map(resource => resource.category[locale])).size
+  return <AtlasPage locale={locale} activeView="resources" copy={copy} onLocaleChange={onLocaleChange}>
+    <AtlasHero eyebrow={atlasCopy.eyebrow} title={atlasCopy.title} description={atlasCopy.description} stats={[{ value: RESOURCE_CATALOG.length, label: atlasCopy.count }, { value: categoryCount, label: atlasCopy.categories }]} />
+    <AtlasSearch value={query} onChange={setQuery} placeholder={atlasCopy.search} resultLabel={ATLAS_COPY[locale].result} resultCount={filtered.length} />
+    <div className="resource-groups">{Object.entries(groups).map(([category, resources]) => <section key={category}><header><h2>{category}</h2><span className="mono">{String(resources.length).padStart(2, '0')} / NODES</span></header><div className="resource-grid">{resources.map(resource => { const Icon = resource.icon; const external = resource.href.startsWith('http'); return <a key={resource.href} href={resource.href} target="_blank" rel="noreferrer"><span className="resource-icon"><Icon size={21} /></span><div><h3>{resource.title[locale]}</h3><span className="mono resource-domain">{external ? new URL(resource.href).hostname : 'greenthree.blog'}</span><p>{resource.description[locale]}</p></div><ExternalLink className="resource-open" size={15} aria-label={atlasCopy.open} /></a> })}</div></section>)}</div>
+    {filtered.length === 0 && <p className="atlas-empty">{atlasCopy.empty}</p>}
+  </AtlasPage>
+}
+
+function AtlasPage({ locale, activeView, copy, onLocaleChange, children }) {
+  return <div className={`app-shell atlas-shell locale-${locale}`}><div className="ambient-grid" aria-hidden="true" /><AtlasHeader locale={locale} onLocaleChange={onLocaleChange} copy={copy} activeView={activeView} /><main className="atlas-main">{children}</main><footer className="atlas-footer mono"><span>ψ(x,t) // QUANTUM_CORE</span><span>{copy.nominal}</span></footer></div>
+}
+
 function App() {
+  const view = new URLSearchParams(window.location.search).get('view')
   const [locale, setLocale] = useState(initialLocale)
   const [phase, setPhase] = useState(42)
   const [representation, setRepresentation] = useState('SCHR')
@@ -466,9 +589,10 @@ function App() {
     const documentLanguage = locale === 'zh' ? 'zh-CN' : 'en'
     document.documentElement.lang = documentLanguage
     document.documentElement.dataset.locale = locale
-    document.title = locale === 'zh' ? 'greenthree blog — 让物理可见' : 'greenthree blog — physics, made visible'
+    const atlasTitle = view && ATLAS_COPY[locale][view]?.title
+    document.title = atlasTitle ? `${atlasTitle} — greenthree blog` : locale === 'zh' ? 'greenthree blog — 让物理可见' : 'greenthree blog — physics, made visible'
     try { window.localStorage.setItem('greenthree-locale', locale) } catch { /* storage is optional */ }
-  }, [locale])
+  }, [locale, view])
 
   const openArticle = article => {
     setSelectedArticle(articleMap.get(article.id) || article)
@@ -480,11 +604,16 @@ function App() {
     window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#articles`)
   }
 
+  const articleReader = localizedSelectedArticle && <ArticleReader article={localizedSelectedArticle} onClose={closeArticle} copy={copy} locale={locale} onLocaleChange={setLocale} />
+  if (view === 'articles') return <><ArticleAtlas locale={locale} items={localizedArticles} onOpen={openArticle} copy={copy} onLocaleChange={setLocale} />{articleReader}</>
+  if (view === 'topics') return <><TopicAtlas locale={locale} items={localizedArticles} topics={topicCatalog} onOpen={openArticle} copy={copy} onLocaleChange={setLocale} />{articleReader}</>
+  if (view === 'resources') return <ResourceAtlas locale={locale} copy={copy} onLocaleChange={setLocale} />
+
   return <div className={`app-shell locale-${locale} representation-${representation.toLowerCase()}`}>
     <div className="ambient-grid" aria-hidden="true" />
     <header id="top" className="topbar">
       <a className="brand" href="#top"><span className="brand-symbol">ψ</span><span>greenthree</span><em>blog</em><small>// QUANTUM_CORE</small></a>
-      <nav className="main-nav"><a className="active" href="#quantum">{copy.nav.quantum}</a><a href="#articles">{copy.nav.notebook}</a><a href="#topics">{copy.nav.topics}</a><a href="#resources">{copy.nav.resources}</a></nav>
+      <nav className="main-nav"><a className="active" href="#quantum">{copy.nav.quantum}</a><a href={atlasHref('articles')} target="_blank" rel="noreferrer">{copy.nav.notebook}</a><a href={atlasHref('topics')} target="_blank" rel="noreferrer">{copy.nav.topics}</a><a href={atlasHref('resources')} target="_blank" rel="noreferrer">{copy.nav.resources}</a></nav>
       <div className="top-actions"><LanguageSwitch locale={locale} onChange={setLocale} label={copy.languageControl} /><span className="mono">SYS.08 / 24</span><button className="icon-button menu-trigger" onClick={() => setMenuOpen(true)} aria-label={copy.openMenu}><Menu size={16} /></button></div>
     </header>
     <main className="content-grid">
@@ -499,7 +628,7 @@ function App() {
             <span className="mono eyebrow">{copy.physicsBlog}</span>
             <h1>{copy.hero.line1}<br /><span>{copy.hero.accent}</span> {copy.hero.joiner}<br />{copy.hero.line3}<br />{copy.hero.line4}</h1>
             <p>{copy.heroDescription}</p>
-            <button className="primary-button" onClick={() => document.getElementById('articles')?.scrollIntoView({ behavior: 'smooth' })}>{copy.explore} <ChevronRight size={15} /></button>
+            <a className="primary-button" href={atlasHref('articles')} target="_blank" rel="noreferrer">{copy.explore} <ChevronRight size={15} /></a>
           </div>
         </section>
         <ArticleArchive items={localizedArticles} onOpen={openArticle} copy={copy} />
@@ -512,9 +641,9 @@ function App() {
     </main>
     <HudDock representation={representation} setRepresentation={setRepresentation} copy={copy} />
     <footer className="bottom-line mono"><span>ψ(x,t) // QUANTUM_CORE</span><span>{copy.nominal}</span></footer>
-    {menuOpen && <div className="menu-overlay"><div className="menu-overlay-head"><a className="brand" href="#top"><span className="brand-symbol">ψ</span><span>greenthree</span><em>blog</em></a><div className="menu-overlay-actions"><LanguageSwitch locale={locale} onChange={setLocale} label={copy.languageControl} /><button className="icon-button" onClick={() => setMenuOpen(false)} aria-label={copy.closeMenu}><X size={17} /></button></div></div><nav><a href="#quantum" onClick={() => setMenuOpen(false)}>{copy.nav.quantum} <ChevronRight size={20} /></a><a href="#articles" onClick={() => setMenuOpen(false)}>{copy.nav.notebook} <ChevronRight size={20} /></a><a href="#topics" onClick={() => setMenuOpen(false)}>{copy.nav.topics} <ChevronRight size={20} /></a><a href="#resources" onClick={() => setMenuOpen(false)}>{copy.nav.resources} <ChevronRight size={20} /></a></nav><span className="mono menu-overlay-foot">SYS.08 / 24 <span>{copy.stateOnline}</span></span></div>}
+    {menuOpen && <div className="menu-overlay"><div className="menu-overlay-head"><a className="brand" href="#top"><span className="brand-symbol">ψ</span><span>greenthree</span><em>blog</em></a><div className="menu-overlay-actions"><LanguageSwitch locale={locale} onChange={setLocale} label={copy.languageControl} /><button className="icon-button" onClick={() => setMenuOpen(false)} aria-label={copy.closeMenu}><X size={17} /></button></div></div><nav><a href="#quantum" onClick={() => setMenuOpen(false)}>{copy.nav.quantum} <ChevronRight size={20} /></a><a href={atlasHref('articles')} target="_blank" rel="noreferrer" onClick={() => setMenuOpen(false)}>{copy.nav.notebook} <ChevronRight size={20} /></a><a href={atlasHref('topics')} target="_blank" rel="noreferrer" onClick={() => setMenuOpen(false)}>{copy.nav.topics} <ChevronRight size={20} /></a><a href={atlasHref('resources')} target="_blank" rel="noreferrer" onClick={() => setMenuOpen(false)}>{copy.nav.resources} <ChevronRight size={20} /></a></nav><span className="mono menu-overlay-foot">SYS.08 / 24 <span>{copy.stateOnline}</span></span></div>}
     {selectedTopicEntry && <div className="topic-modal" role="dialog" aria-modal="true" aria-label={selectedTopicEntry[locale]}><div className="topic-modal-inner"><button className="icon-button" onClick={() => setSelectedTopic(null)} aria-label={copy.closeTopic}><X size={17} /></button><span className="mono">{copy.query} / {selectedTopicEntry.id.toUpperCase()}</span><h2 lang={locale === 'zh' ? 'zh-CN' : 'en'}>{selectedTopicEntry[locale]}</h2><p>{copy.topicQueued}</p><div className="modal-status"><span className="hud-dot" /> {copy.topicStatus}</div></div></div>}
-    {localizedSelectedArticle && <ArticleReader article={localizedSelectedArticle} onClose={closeArticle} copy={copy} locale={locale} onLocaleChange={setLocale} />}
+    {articleReader}
   </div>
 }
 

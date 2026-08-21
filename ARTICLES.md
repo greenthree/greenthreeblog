@@ -42,7 +42,7 @@ Write the complete English article here.
 
 `slug` 是不随语言变化的文章地址标识。发布后不要随意修改，否则旧的 `#article/slug` 链接会失效。文章按 `date` 从新到旧排列；正文支持标题、列表、引用、代码块、表格、GitHub Flavored Markdown 和 LaTeX 数学公式。
 
-文章在站内被主动打开时，会使用 `slug` 在 Supabase 中原子累加点击数。因此每篇文章必须使用唯一、稳定的小写英文 `slug`，词与词之间使用连字符。
+文章在站内被主动打开时，会使用稳定的文章 ID 在 Supabase 中原子累加点击数。推荐每篇文章填写唯一、稳定的小写英文 `slug`，词与词之间使用连字符；如果省略或使用非 ASCII slug，构建会根据文件路径生成稳定的 `note-xxxxxxx` ID。
 
 ## 发布
 
@@ -50,10 +50,25 @@ Write the complete English article here.
 
 ```bash
 npm run build
+npm run validate:articles
 git add src/content/你的文章.md
 git commit -m "Add bilingual article"
 git push origin main
 ```
+
+如果 Supabase 已应用文章 slug 白名单迁移，新增文章后还需要在只运行于本地或 CI 的安全环境中同步白名单：
+
+首次使用阅读量统计时，请先在 Supabase SQL Editor 中执行 `supabase/migrations/202608200001_article_slug_registry.sql`。
+
+```bash
+# Bash
+SUPABASE_SERVICE_ROLE_KEY=只放在本地或GitHub Actions密钥中 npm run sync:article-slugs
+
+# PowerShell
+$env:SUPABASE_SERVICE_ROLE_KEY = '只放在本地或GitHub Actions密钥中'; npm run sync:article-slugs
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` 绝不能写入 `.env`、前端代码或 GitHub Pages 构建产物。
 
 GitHub Actions 会自动构建并发布到 GitHub Pages。
 
